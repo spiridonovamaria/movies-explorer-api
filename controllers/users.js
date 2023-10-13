@@ -5,17 +5,20 @@ const User = require('../models/user');
 const BadRequest = require('../errors/BadRequest');
 const Conflict = require('../errors/Conflict');
 const NotFound = require('../errors/NotFound');
-const Unauthorized = require('../errors/autherror');
+
+const { CREATED_CODE } = require('../utils/constants');
 
 const { NODE_ENV, JWT_SECRET } = process.env;
+const { JWT_SECRET_DEV } = require('../utils/constants');
 
 function getUser(req, res, next) {
-  const { id } = req.params;
-  User.findById(id)
-    .then((user) => {
-      if (user) return res.status(200).send(user);
-
+  const userId = req.user._id;
+  User.findById(userId)
+    .orFail(() => {
       throw new NotFound('Пользователь не найден');
+    })
+    .then((user) => {
+      res.send(user);
     })
     .catch((error) => {
       if (error.name === 'CastError') {
@@ -27,21 +30,18 @@ function getUser(req, res, next) {
 }
 
 function createUser(req, res, next) {
-  const {
-    email, password, name,
-  } = req.body;
-  bcrypt.hash(password, 10)
+  bcrypt
+    .hash(req.body.password, 10)
     .then((hash) => User.create({
-      name, email, password: hash,
+      email: req.body.email,
+      password: hash,
+      name: req.body.name,
     }))
-    .then((user) => {
-      const { _id } = user;
-      return res.status(201).send({
-        email,
-        name,
-        _id,
-      });
-    })
+    .then((user) => res.status(CREATED_CODE).send({
+      email: user.email,
+      name: user.name,
+      _id: user._id,
+    }))
     .catch((error) => {
       if (error.code === 11000) {
         next(new Conflict('Пользователь уже существует'));
@@ -55,16 +55,25 @@ function createUser(req, res, next) {
 
 function updateUser(req, res, next) {
   const { name, email } = req.body;
-  const { userId } = req.user;
-  User.findByIdAndUpdate(userId, { name, email }, { new: true, runValidators: true })
-    .then((user) => {
-      if (user) return res.status(200).send(user);
-
+  User.findByIdAndUpdate(
+    req.user._id,
+    { email, name },
+    {
+      new: true,
+      runValidators: true,
+    },
+  )
+    .orFail(() => {
       throw new NotFound('Пользователь не найден');
     })
+    .then((user) => {
+      res.send(user);
+    })
     .catch((error) => {
-      if (error.name === 'ValidationError' || error.name === 'CastError') {
-        next(new BadRequest('Переданы некорректные данные пользователя'));
+      if (error.code === 11000) {
+        next(new Conflict('Пользователь уже существует'));
+      } else if (error.name === 'ValidationError') {
+        next(new BadRequest('Переданы некорректные данные при обновлении профиля'));
       } else {
         next(error);
       }
@@ -73,21 +82,17 @@ function updateUser(req, res, next) {
 
 function login(req, res, next) {
   const { email, password } = req.body;
-
-  User.findUserByCredentials(email, password)
-    .then(({ _id: userId }) => {
-      if (userId) {
-        const token = jwt.sign({ userId }, NODE_ENV === 'production' ? JWT_SECRET : 'dev-secret', { expiresIn: '7d' });
-
-        // вернём токен
-        return res.status(200).send({ token });
-      }
-
-      throw new Unauthorized('Неправильные почта или пароль');
+  return User.findUserByCredentials(email, password)
+    .then((user) => {
+      const token = jwt.sign(
+        { _id: user._id },
+        NODE_ENV === 'production' ? JWT_SECRET : JWT_SECRET_DEV,
+        { expiresIn: '7d' },
+      );
+      res.send({ token });
     })
     .catch(next);
 }
-
 module.exports = {
   createUser,
   login,

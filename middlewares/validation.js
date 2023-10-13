@@ -1,16 +1,17 @@
 const { celebrate, Joi } = require('celebrate');
-const { urlPattern } = require('../utils/constants');
+
+const { regLink } = require('../utils/constants');
 
 const validateAddMovie = celebrate({
   body: Joi.object().keys({
     country: Joi.string().required(),
     director: Joi.string().required(),
     duration: Joi.number().required(),
-    year: Joi.string().required(),
+    year: Joi.number().required(),
     description: Joi.string().required(),
-    image: Joi.string().regex(urlPattern).required(),
-    trailerLink: Joi.string().regex(urlPattern).required(),
-    thumbnail: Joi.string().regex(urlPattern).required(),
+    image: Joi.string().required().regex(regLink),
+    trailerLink: Joi.string().required().regex(regLink),
+    thumbnail: Joi.string().required().regex(regLink),
     movieId: Joi.number().required(),
     nameRU: Joi.string().required(),
     nameEN: Joi.string().required(),
@@ -19,37 +20,41 @@ const validateAddMovie = celebrate({
 
 const validateDeleteMovie = celebrate({
   params: Joi.object().keys({
-    _id: Joi.string().required().hex().length(24),
+    movieId: Joi.string().hex().length(24),
   }),
 });
 
 const validateSignin = celebrate({
   body: Joi.object().keys({
-    email: Joi.string().required().email(),
+    email: Joi.string()
+      .required()
+      .email({ tlds: { allow: false } }),
     password: Joi.string().required(),
   }),
 });
 
 const validateSignup = celebrate({
   body: Joi.object().keys({
-    name: Joi.string().min(2).max(30),
-    about: Joi.string().min(2).max(30),
-    avatar: Joi.string().pattern(urlPattern),
-    email: Joi.string().required().email(),
-    password: Joi.string().required().min(8),
+    name: Joi.string().required().min(2).max(30),
+    email: Joi.string()
+      .required()
+      .email({ tlds: { allow: false } }),
+    password: Joi.string().required(),
   }),
 });
 
 const validateGetUser = celebrate({
   params: Joi.object().keys({
-    id: Joi.string().length(24).hex().required(),
+    userId: Joi.string().hex().length(24),
   }),
 });
 
 const validateUpdateUser = celebrate({
   body: Joi.object().keys({
-    name: Joi.string().min(2).max(30),
-    about: Joi.string().min(2).max(30),
+    name: Joi.string().required().min(2).max(30),
+    email: Joi.string()
+      .required()
+      .email({ tlds: { allow: false } }),
   }),
 });
 

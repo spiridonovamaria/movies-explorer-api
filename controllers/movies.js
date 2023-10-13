@@ -4,12 +4,13 @@ const Forbidden = require('../errors/Forbidden');
 const NotFound = require('../errors/NotFound');
 const BadRequest = require('../errors/BadRequest');
 
-function getInitialMovies(req, res, next) {
-  const owner = req.user._id;
-  Movie.find({ owner })
-    .then((movies) => res.send({ data: movies }))
+const getInitialMovies = (req, res, next) => {
+  Movie.find({ owner: req.user._id })
+    .then((movies) => {
+      res.send(movies);
+    })
     .catch(next);
-}
+};
 
 function addMovie(req, res, next) {
   const owner = req.user._id;
@@ -25,7 +26,7 @@ function addMovie(req, res, next) {
     movieId,
     nameRU,
     nameEN,
-  } = req.user;
+  } = req.body;
   Movie.create({
     country,
     director,
@@ -53,31 +54,34 @@ function addMovie(req, res, next) {
 }
 
 function deleteMovie(req, res, next) {
-  const { id: movieId } = req.params;
-  const { userId } = req.user;
-  Movie.findById({ _id: movieId })
+  Movie.findById(req.params.movieId)
+    .orFail(() => {
+      throw new NotFound('Запрашиваемое кино не найдено');
+    })
     .then((movie) => {
-      if (!movie) {
-        throw new NotFound('Запрашиваемое кино не найдено');
-      }
-
-      const { owner: movieOwnerId } = movie;
-      if (movieOwnerId.valueOf() !== userId) {
+      const owner = movie.owner.toString();
+      if (req.user._id === owner) {
+        Movie.deleteOne(movie)
+          .then(() => {
+            res.send(movie);
+          })
+          .catch(next);
+      } else {
         throw new Forbidden('Удаление запрещено');
       }
-
-      return Movie.findByIdAndDelete(movieId);
     })
-    .then((deleted) => {
-      if (!deleted) {
-        throw new NotFound('Кино удалено');
+    .catch((err) => {
+      if (err.name === 'CastError') {
+        next(
+          new BadRequest(
+            'Переданы некорректные данные для удаления фильма',
+          ),
+        );
+      } else {
+        next(err);
       }
-
-      res.send({ data: deleted });
-    })
-    .catch(next);
+    });
 }
-
 module.exports = {
   getInitialMovies,
   addMovie,

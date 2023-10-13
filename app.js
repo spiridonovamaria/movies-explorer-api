@@ -12,12 +12,12 @@ const routes = require('./routes');
 const CentralErrorHandling = require('./middlewares/CentralErrorHandling');
 const cors = require('./middlewares/cors');
 
-const URL = 'mongodb://127.0.0.1:27017/bitfilmsdb';
+const { DB_URL = 'mongodb://127.0.0.1:27017/bitfilmsdb' } = process.env;
 const { PORT = 3000 } = process.env;
 
 mongoose.set('strictQuery', true);
 
-mongoose.connect(URL).then(() => {
+mongoose.connect(DB_URL).then(() => {
   console.log('Database connected');
 })
   .catch(() => {
@@ -25,7 +25,7 @@ mongoose.connect(URL).then(() => {
   });
 
 const app = express();
-
+app.use(express.json());
 app.use(helmet());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
