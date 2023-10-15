@@ -1,35 +1,67 @@
-require('dotenv').config();
-const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const User = require('../models/user');
-const BadRequest = require('../errors/BadRequest');
-const Conflict = require('../errors/Conflict');
-const NotFound = require('../errors/NotFound');
-
 const { CREATED_CODE } = require('../utils/constants');
 
 const { NODE_ENV, JWT_SECRET } = process.env;
 const { JWT_SECRET_DEV } = require('../utils/constants');
+const BadRequestError = require('../errors/BadRequestError');
+const NotFoundError = require('../errors/NotFoundError ');
+const DataConflictError = require('../errors/DataConflictError');
 
-function getUser(req, res, next) {
+// текущий зареганный юзер
+const getCurrentUserInfo = (req, res, next) => {
   const userId = req.user._id;
   User.findById(userId)
     .orFail(() => {
-      throw new NotFound('Пользователь не найден');
+      throw new NotFoundError('Пользователь по указанному _id не найден');
     })
     .then((user) => {
       res.send(user);
     })
-    .catch((error) => {
-      if (error.name === 'CastError') {
-        next(new BadRequest('Переданы некорректные данные пользователя'));
+    .catch((err) => {
+      if (err.name === 'CastError') {
+        next(new BadRequestError('Запрашиваемый пользователь не найден'));
       } else {
-        next(error);
+        next(err);
       }
     });
-}
+};
 
-function createUser(req, res, next) {
+// редачим юзера
+const editProfileUserInfo = (req, res, next) => {
+  const { email, name } = req.body;
+  User.findByIdAndUpdate(
+    req.user._id,
+    { email, name },
+    {
+      new: true,
+      runValidators: true,
+    },
+  )
+    .orFail(() => {
+      throw new NotFoundError('Пользователь с указанным _id не найден');
+    })
+    .then((user) => {
+      res.send(user);
+    })
+    .catch((err) => {
+      if (err.code === 11000) {
+        next(new DataConflictError('Такой пользователь уже существует'));
+      } else if (err.name === 'ValidationError') {
+        next(
+          new BadRequestError(
+            'Переданы некорректные данные при обновлении профиля',
+          ),
+        );
+      } else {
+        next(err);
+      }
+    });
+};
+
+// создаем пользователя
+const createUser = (req, res, next) => {
   bcrypt
     .hash(req.body.password, 10)
     .then((hash) => User.create({
@@ -42,45 +74,23 @@ function createUser(req, res, next) {
       name: user.name,
       _id: user._id,
     }))
-    .catch((error) => {
-      if (error.code === 11000) {
-        next(new Conflict('Пользователь уже существует'));
-      } else if (error.name === 'ValidationError') {
-        next(new BadRequest('Переданы некорректные данные при создании аккаунта'));
+    .catch((err) => {
+      if (err.code === 11000) {
+        next(new DataConflictError('Такой пользователь уже существует'));
+      } else if (err.name === 'ValidationError') {
+        next(
+          new BadRequestError(
+            'Переданы некорректные данные при создании пользователя',
+          ),
+        );
       } else {
-        next(error);
+        next(err);
       }
     });
-}
+};
 
-function updateUser(req, res, next) {
-  const { name, email } = req.body;
-  User.findByIdAndUpdate(
-    req.user._id,
-    { email, name },
-    {
-      new: true,
-      runValidators: true,
-    },
-  )
-    .orFail(() => {
-      throw new NotFound('Пользователь не найден');
-    })
-    .then((user) => {
-      res.send(user);
-    })
-    .catch((error) => {
-      if (error.code === 11000) {
-        next(new Conflict('Пользователь уже существует'));
-      } else if (error.name === 'ValidationError') {
-        next(new BadRequest('Переданы некорректные данные при обновлении профиля'));
-      } else {
-        next(error);
-      }
-    });
-}
-
-function login(req, res, next) {
+// логинимся и выходим
+const login = (req, res, next) => {
   const { email, password } = req.body;
   return User.findUserByCredentials(email, password)
     .then((user) => {
@@ -92,10 +102,11 @@ function login(req, res, next) {
       res.send({ token });
     })
     .catch(next);
-}
+};
+
 module.exports = {
   createUser,
   login,
-  getUser,
-  updateUser,
+  getCurrentUserInfo,
+  editProfileUserInfo,
 };
