@@ -1,2 +1,2 @@
 ## Ссылки на проект
-Backend https://api.spiridon.nomoreparties.co
+Backend https://api.moviesdiplom.nomoredomainsicu.ru
